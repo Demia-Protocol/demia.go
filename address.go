@@ -55,6 +55,7 @@ const (
 	PrefixMainnet NetworkPrefix = "iota"
 	PrefixDevnet  NetworkPrefix = "atoi"
 	PrefixShimmer NetworkPrefix = "smr"
+	PrefixDemia   NetworkPrefix = "dmia"
 	PrefixTestnet NetworkPrefix = "rms"
 )
 

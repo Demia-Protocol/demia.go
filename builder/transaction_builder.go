@@ -3,7 +3,6 @@ package builder
 import (
 	"errors"
 	"fmt"
-
 	"github.com/iotaledger/hive.go/serializer/v2"
 	iotago "github.com/iotaledger/iota.go/v3"
 )

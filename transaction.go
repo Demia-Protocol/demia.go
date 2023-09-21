@@ -65,6 +65,13 @@ func TransactionUnlocksArrayRules() serializer.ArrayRules {
 	return txUnlocksArrayRules
 }
 
+type TagID []byte
+
+// ToHex converts the TagID to its hex representation.
+func (tagID TagID) ToHex() string {
+	return EncodeHex(tagID[:])
+}
+
 // TransactionID is the ID of a Transaction.
 type TransactionID [TransactionIDLength]byte
 
