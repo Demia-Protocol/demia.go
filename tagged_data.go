@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/iotaledger/hive.go/serializer/v2"
 	"github.com/iotaledger/iota.go/v3/util"
 )
@@ -25,9 +26,9 @@ type TaggedData struct {
 	// The data within the payload.
 	Data []byte
 	// Public key of the sender
-	PublicKey []byte
+	PublicKey *[]byte
 	// Signature of the data bytes
-	Signature []byte
+	Signature *[]byte
 }
 
 func (u *TaggedData) PayloadType() PayloadType {
@@ -35,7 +36,11 @@ func (u *TaggedData) PayloadType() PayloadType {
 }
 
 func (u *TaggedData) Deserialize(data []byte, deSeriMode serializer.DeSerializationMode, deSeriCtx interface{}) (int, error) {
-	return serializer.NewDeserializer(data).
+	var tempPublicKey, tempSignature []byte
+
+	deserializer := serializer.NewDeserializer(data)
+
+	_, err := deserializer.
 		CheckTypePrefix(uint32(PayloadTaggedData), serializer.TypeDenotationUint32, func(err error) error {
 			return fmt.Errorf("unable to deserialize tagged data: %w", err)
 		}).
@@ -45,13 +50,23 @@ func (u *TaggedData) Deserialize(data []byte, deSeriMode serializer.DeSerializat
 		ReadVariableByteSlice(&u.Data, serializer.SeriLengthPrefixTypeAsUint32, func(err error) error {
 			return fmt.Errorf("unable to deserialize tagged data data: %w", err)
 		}, 0, BlockBinSerializedMaxSize). // obviously can never be that size
-		ReadVariableByteSlice(&u.PublicKey, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
+		ReadVariableByteSlice(u.PublicKey, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to deserialize tagged data public key: %w", err)
 		}, 0, 32).
-		ReadVariableByteSlice(&u.Signature, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
+		ReadVariableByteSlice(u.Signature, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to deserialize tagged data signature: %w", err)
 		}, 0, 64).
 		Done()
+
+	if err != nil {
+		return 0, err
+	}
+	
+	// Assign the pointers after successful deserialization
+	u.PublicKey = &tempPublicKey
+	u.Signature = &tempSignature
+
+	return 0, nil
 }
 
 func (u *TaggedData) Serialize(deSeriMode serializer.DeSerializationMode, deSeriCtx interface{}) ([]byte, error) {
@@ -68,10 +83,10 @@ func (u *TaggedData) Serialize(deSeriMode serializer.DeSerializationMode, deSeri
 		WriteVariableByteSlice(u.Data, serializer.SeriLengthPrefixTypeAsUint32, func(err error) error {
 			return fmt.Errorf("unable to serialize tagged data data: %w", err)
 		}, 0, 0).
-		WriteVariableByteSlice(u.PublicKey, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
+		WriteVariableByteSlice(*u.PublicKey, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to serialize tagged data public key: %w", err)
 		}, 0, 32).
-		WriteVariableByteSlice(u.Signature, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
+		WriteVariableByteSlice(*u.Signature, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to serialize tagged data signature: %w", err)
 		}, 0, 64).
 		Serialize()
@@ -82,8 +97,8 @@ func (u *TaggedData) Size() int {
 	return util.NumByteLen(uint32(PayloadTaggedData)) +
 		serializer.OneByte + len(u.Tag) +
 		serializer.UInt32ByteSize + len(u.Data) +
-		serializer.OneByte + len(u.PublicKey) +
-		serializer.OneByte + len(u.Signature)
+		serializer.OneByte + len(*u.PublicKey) +
+		serializer.OneByte + len(*u.Signature)
 }
 
 func (u *TaggedData) MarshalJSON() ([]byte, error) {
@@ -91,8 +106,8 @@ func (u *TaggedData) MarshalJSON() ([]byte, error) {
 	jTaggedData.Type = int(PayloadTaggedData)
 	jTaggedData.Tag = EncodeHex(u.Tag)
 	jTaggedData.Data = EncodeHex(u.Data)
-	jTaggedData.PublicKey = EncodeHex(u.PublicKey)
-	jTaggedData.Signature = EncodeHex(u.Signature)
+	jTaggedData.PublicKey = EncodeHex(*u.PublicKey)
+	jTaggedData.Signature = EncodeHex(*u.Signature)
 	return json.Marshal(jTaggedData)
 }
 
@@ -129,15 +144,21 @@ func (j *jsonTaggedData) ToSerializable() (serializer.Serializable, error) {
 		return nil, fmt.Errorf("unable to decode data from JSON for tagged data payload: %w", err)
 	}
 
-	pkBytes, err := DecodeHex(j.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode public key from JSON for tagged data payload: %w", err)
+	var pkBytes []byte
+	if j.PublicKey != "" {
+		pkBytes, err = DecodeHex(j.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode public key from JSON for tagged data payload: %w", err)
+		}
 	}
 
-	sigBytes, err := DecodeHex(j.Signature)
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode signature from JSON for tagged data payload: %w", err)
+	var sigBytes []byte
+	if j.Signature != "" {
+		sigBytes, err = DecodeHex(j.Signature)
+		if err != nil {
+			return nil, fmt.Errorf("unable to decode signature from JSON for tagged data payload: %w", err)
+		}
 	}
 
-	return &TaggedData{Tag: tagBytes, Data: dataBytes, PublicKey: pkBytes, Signature: sigBytes}, nil
+	return &TaggedData{Tag: tagBytes, Data: dataBytes, PublicKey: &pkBytes, Signature: &sigBytes}, nil
 }
