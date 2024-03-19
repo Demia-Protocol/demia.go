@@ -51,22 +51,20 @@ func (u *TaggedData) Deserialize(data []byte, deSeriMode serializer.DeSerializat
 			return fmt.Errorf("unable to deserialize tagged data data: %w", err)
 		}, 0, BlockBinSerializedMaxSize) // obviously can never be that size
 
-	amount, err := deserializer.
+	deserializer.
 		ReadVariableByteSlice(&tempPublicKey, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to deserialize tagged data public key: %w", err)
 		}, 0, 32).
 		ReadVariableByteSlice(&tempSignature, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to deserialize tagged data signature: %w", err)
-		}, 0, 64).
-		Done()
+		}, 0, 64)
 
 	if len(tempPublicKey) > 0 {
-		// Assign the pointers after successful deserialization
 		u.PublicKey = &tempPublicKey
 		u.Signature = &tempSignature
 	}
 
-	return amount, err
+	return deserializer.Done()
 }
 
 func (u *TaggedData) Serialize(deSeriMode serializer.DeSerializationMode, deSeriCtx interface{}) ([]byte, error) {
@@ -84,7 +82,7 @@ func (u *TaggedData) Serialize(deSeriMode serializer.DeSerializationMode, deSeri
 			return fmt.Errorf("unable to serialize tagged data data: %w", err)
 		}, 0, 0)
 	
-	if u.PublicKey != nil {
+	if u.PublicKey != nil && len(*u.PublicKey) > 0 {
 		serialiser.WriteVariableByteSlice(*u.PublicKey, serializer.SeriLengthPrefixTypeAsByte, func(err error) error {
 			return fmt.Errorf("unable to serialize tagged data public key: %w", err)
 		}, 0, 32).
@@ -110,7 +108,7 @@ func (u *TaggedData) Size() int {
 		serializer.UInt32ByteSize + len(u.Data) +
 		serializer.OneByte + serializer.OneByte
 
-	if u.PublicKey != nil {
+	if u.PublicKey != nil && len(*u.PublicKey) > 0 {
 		size += len(*u.PublicKey) + len(*u.Signature)
 	}
 	return size
@@ -121,10 +119,8 @@ func (u *TaggedData) MarshalJSON() ([]byte, error) {
 	jTaggedData.Type = int(PayloadTaggedData)
 	jTaggedData.Tag = EncodeHex(u.Tag)
 	jTaggedData.Data = EncodeHex(u.Data)
-	if u.PublicKey != nil {
+	if u.PublicKey != nil && len(*u.PublicKey) > 0  {
 		jTaggedData.PublicKey = EncodeHex(*u.PublicKey)
-	}
-	if u.PublicKey != nil {
 		jTaggedData.Signature = EncodeHex(*u.Signature)
 	}
 	
@@ -164,21 +160,23 @@ func (j *jsonTaggedData) ToSerializable() (serializer.Serializable, error) {
 		return nil, fmt.Errorf("unable to decode data from JSON for tagged data payload: %w", err)
 	}
 
-	var pkBytes []byte
+	var pkBytes *[]byte
 	if j.PublicKey != "" {
-		pkBytes, err = DecodeHex(j.PublicKey)
+		tempBytes, err := DecodeHex(j.PublicKey)
+		pkBytes = &tempBytes
 		if err != nil {
 			return nil, fmt.Errorf("unable to decode public key from JSON for tagged data payload: %w", err)
 		}
 	}
 
-	var sigBytes []byte
+	var sigBytes *[]byte
 	if j.Signature != "" {
-		sigBytes, err = DecodeHex(j.Signature)
+		tempBytes, err := DecodeHex(j.Signature)
+		sigBytes = &tempBytes
 		if err != nil {
 			return nil, fmt.Errorf("unable to decode signature from JSON for tagged data payload: %w", err)
 		}
 	}
 
-	return &TaggedData{Tag: tagBytes, Data: dataBytes, PublicKey: &pkBytes, Signature: &sigBytes}, nil
+	return &TaggedData{Tag: tagBytes, Data: dataBytes, PublicKey: pkBytes, Signature: sigBytes}, nil
 }
